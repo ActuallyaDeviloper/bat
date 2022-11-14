@@ -67,17 +67,19 @@ public class Tablist {
      * @param tabList the tablist
      * @return the list of tablist entries
      */
-    public @NonNull List<TabListEntry> entries(final @NonNull TabList tabList) {
+    public @NonNull List<TabListEntry> entries(final @NonNull TabList tabList, boolean showVanished, UUID self) {
         return profileEntries
                 .stream()
                 .sorted(Comparator.comparing(GameProfile::getName))
+				.filter(gameProfile -> showVanished || !tablistService.isVanished(gameProfile.getName()))
                 .map(gameProfile ->
                         TabListEntry.builder()
                                 .latency(this.tablistService.ping(gameProfile.getId()))
                                 .tabList(tabList)
                                 .profile(gameProfile)
                                 .displayName(this.tablistService.displayName(gameProfile.getId()))
-                                .gameMode(this.getGameMode(tabList, gameProfile.getId()))
+                                .gameMode((showVanished && tablistService.isVanished(gameProfile.getName()) && !self.equals(gameProfile.getId()))
+										? 3 : this.getGameMode(tabList, gameProfile.getId()))
                                 .build()
                 ).toList();
     }

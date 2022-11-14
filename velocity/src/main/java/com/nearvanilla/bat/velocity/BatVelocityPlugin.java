@@ -10,7 +10,9 @@ import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.player.ServerPostConnectEvent;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.plugin.Plugin;
+import com.velocitypowered.api.plugin.Dependency;
 import com.velocitypowered.api.proxy.ProxyServer;
+
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.slf4j.Logger;
@@ -24,7 +26,11 @@ import org.slf4j.Logger;
         version = "1.0.1",
         authors = {"Bluely_", "Prof_Bloodstone"},
         description = "Basic, awesome TAB plugin",
-        url = "nearvanilla.com"
+        url = "nearvanilla.com",
+		dependencies = {
+			@Dependency(id = "velocityvanish", optional = true),
+			@Dependency(id = "luckperms", optional = true)
+		}
 )
 public class BatVelocityPlugin {
 

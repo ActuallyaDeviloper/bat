@@ -8,10 +8,13 @@ import com.nearvanilla.bat.velocity.config.PluginConfig;
 import com.nearvanilla.bat.velocity.config.TablistConfig;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
+import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.proxy.ServerConnection;
 import com.velocitypowered.api.proxy.player.TabList;
 import com.velocitypowered.api.proxy.player.TabListEntry;
 import com.velocitypowered.api.scheduler.ScheduledTask;
+import com.velocitypowered.api.util.GameProfile;
+import com.velocitypowered.api.plugin.PluginContainer;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -19,6 +22,7 @@ import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.checkerframework.checker.nullness.qual.NonNull;
+import ir.syrent.velocityvanish.velocity.VelocityVanish;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -54,7 +58,8 @@ public class TablistService {
 
     private @MonotonicNonNull ScheduledTask tablistUpdateTask;
     private @MonotonicNonNull PluginConfig config;
-
+	private @MonotonicNonNull VelocityVanish velocityVanish;
+	private int cachedTotalPlayerCount = 0;
 
     /**
      * Constructs {@code TablistService}
@@ -120,8 +125,24 @@ public class TablistService {
                 this.defaultTablist.addPlayer(player);
             }
         }
+		PluginContainer container = server.getPluginManager().getPlugin("velocityvanish").orElse(null);
+        velocityVanish = container == null ? null : (VelocityVanish)container.getInstance().orElse(null);
+		if (velocityVanish == null)
+            logger.warning("Unable to find vanish plugin.");
     }
 
+    public boolean isVanished(String name) {
+		if (velocityVanish == null)
+			return false;
+		
+        try {
+			return velocityVanish.getVanishedPlayers().contains(name);
+        } catch (Exception e) {
+            this.logger.warning("Unable to use vanish plugin or function.");
+            return false;
+        }
+    }
+	
     /**
      * Removes the player from the tablist.
      *
@@ -238,7 +259,7 @@ public class TablistService {
         return TagResolver.resolver(List.of(
                 Placeholder.parsed("groupcode", groupCodeFormat),
                 Placeholder.parsed("servercode", serverCodeFormat),
-                Placeholder.unparsed("proxycount", Integer.toString(server.getPlayerCount())),
+                Placeholder.unparsed("proxycount", Integer.toString(cachedTotalPlayerCount)),
                 Placeholder.unparsed("proxymax", Integer.toString(server.getConfiguration().getShowMaxPlayers())),
                 Placeholder.component("proxymotd", server.getConfiguration().getMotd()),
                 Placeholder.unparsed("servercount", Integer.toString(onlinePlayers)),
@@ -298,19 +319,30 @@ public class TablistService {
      * Updates every player's tablist on the network.
      */
     private void updateTablists() {
+		if (velocityVanish == null)
+			cachedTotalPlayerCount = server.getPlayerCount();
+		else
+		{
+			cachedTotalPlayerCount = 0;
+			for (RegisteredServer server : this.server.getAllServers())
+				for (Player player : server.getPlayersConnected())
+					if (!isVanished(player.getUsername()))
+						++cachedTotalPlayerCount;
+		}
         for (final Player player : this.server.getAllPlayers()) {
             this.updateText(player);
 
             final TabList tabList = player.getTabList();
 
-            final List<TabListEntry> currentEntries = this.defaultTablist.entries(tabList);
+            List<TabListEntry> newEntries = this.defaultTablist.entries(tabList,
+					player.hasPermission("velocityvanish.admin.seevanished"), player.getUniqueId());
             final List<TabListEntry> entries = new ArrayList<>(tabList.getEntries());
 
-            boolean equals = currentEntries.size() == entries.size();
-
+            boolean equals = newEntries.size() == entries.size();
+			
             if (equals) {
-                for (int i = 0; i < currentEntries.size(); i++) {
-                    final TabListEntry currentEntry = currentEntries.get(i);
+                for (int i = 0; i < newEntries.size(); i++) {
+                    final TabListEntry currentEntry = newEntries.get(i);
                     final TabListEntry playerEntry = entries.get(i);
 
                     final Component currentDisplayName = currentEntry.getDisplayNameComponent().isPresent()
@@ -330,7 +362,6 @@ public class TablistService {
 
             if (!equals) {
                 final TabList newTabList = player.getTabList();
-                final List<TabListEntry> newEntries = this.defaultTablist.entries(newTabList);
 
                 for (final TabListEntry entry : newTabList.getEntries()) {
                     newTabList.removeEntry(entry.getProfile().getId());
